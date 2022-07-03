@@ -1,0 +1,136 @@
+// int incomingByte = 0; // for incoming serial data
+// Serial.println(incomingByte, DEC);
+
+
+// https://www.instructables.com/Arduino-Serial-Port-Read-Write/ --> Serial to 16x2LCD
+// https://create.arduino.cc/projecthub/electropeak/sd-card-module-with-arduino-how-to-read-write-data-37f390
+// https://itp.nyu.edu/physcomp/labs/labs-serial-communication/lab-data-logging-with-an-sd-card-reader-using-spi-communication/
+// http://www.learningaboutelectronics.com/Articles/Multiple-SPI-devices-to-an-arduino-microcontroller.php
+
+
+
+// https://stackoverflow.com/questions/31830143/convert-hex-string-to-decimal-in-arduino#31855809
+
+
+#include <SoftwareSerial.h>
+
+
+#define rxPin 10
+#define txPin 11
+SoftwareSerial mySerial =  SoftwareSerial(rxPin, txPin);
+
+
+String inputString = "";                // a string to hold incoming data
+boolean stringComplete = false;         // whether the string is complete
+
+
+#include <SPI.h>
+#include <SD.h>
+File myFile;
+
+const int cardDetect = 9;
+const int chipSelect1 = 10;
+const int chipSelect2 = 8;
+
+
+DateTime now;
+
+void setup() 
+{
+  Serial.begin(9600);
+  while (!Serial) {};                   // wait for serial port to connect. Needed for native USB port only
+
+  inputString.reserve(200);             // reserve 200 bytes for the inputString:
+
+  // software serial ...
+  pinMode(rxPin, INPUT);
+  pinMode(txPin, OUTPUT);
+  mySerial.begin(9600);  
+
+
+  /* 
+  Serial.print("Initializing SD card...");
+  if (!SD.begin(10)) {
+    Serial.println("initialization failed!");
+    while (1);
+  }
+  Serial.println("initialization done."); 
+  */
+
+
+
+  int ledState = HIGH;
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(cardDetect, INPUT);
+  pinMode(chipSelect1, OUTPUT);
+  pinMode(chipSelect2, OUTPUT);
+  //
+  while (digitalRead(cardDetect) == LOW) {    // if the card detect pin is false, no card:
+    digitalWrite(LED_BUILTIN, ledState = !ledState);
+    delay(100);
+  }
+  delay(5000);                                // give the reader 5 seconds to settle the card once it's detected:  
+  while (!SD.begin(chipSelect1)) {             // if the card is not present or cannot be initialized:
+    digitalWrite(LED_BUILTIN, ledState = !ledState);      // toggle LED every 1/4 second while the SD card's not responding:
+    delay(250);
+  }
+  digitalWrite(LED_BUILTIN, LOW);
+
+
+
+  rtc.begin();
+  
+}
+
+
+
+void save_values(){
+  myFile = SD.open("temp.txt", FILE_WRITE);
+  digitalWrite(LED_BUILTIN, HIGH);          //  LED ON  
+  if (myFile) {
+    now = rtc.now();
+    myFile.print(now.hour());myFile.print(":");myFile.print(now.minute());
+    myFile.print(",");myFile.println(inputString); 
+    myFile.close();    
+    digitalWrite(LED_BUILTIN, LOW);         //  switch off if sucessfull  
+  }
+}
+
+void save_values2(){
+  digitalWrite( chipSelect1, LOW ); // LOW-Select -
+  save_values;
+  digitalWrite( chipSelect1, HIGH ); 
+  digitalWrite( chipSelect2, LOW ); // LOW-Select -
+  save_values;
+  digitalWrite( chipSelect2, HIGH ); 
+}
+
+
+
+void loop() 
+{
+ 
+  if (stringComplete)                 // print the string when a newline arrives:
+  {
+    //..........
+    inputString = "";
+    stringComplete = false;
+  }
+  
+  delay(500);
+}
+
+/*
+  SerialEvent occurs whenever a new data comes in the hardware serial RX.  This routine is run between each
+ time loop() runs.  500mS delay inside loop can delay response.  Multiple bytes of data may be available.
+ */
+void serialEvent() 
+{
+  while (Serial.available()) 
+  {
+    char inChar = (char)Serial.read();      // get the new byte:
+    inputString += inChar;                  // add it to the inputString:
+    stringComplete = inChar == '\n';        // if the incoming character is a newline, set a flag  // so the main loop can do something about it:
+  }
+}
+
