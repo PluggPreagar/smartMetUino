@@ -3,18 +3,7 @@
 
 File dataFile;
 
-void setup() 
-{
-    // Open serial communications and wait for port to open:
-    Serial.begin(9600);
-    while (!Serial); // wait for serial port to connect. Needed for native USB port only
-
-    Serial.print("Initializing SD card...");
-    if (!SD.begin(10)) 
-    {
-        Serial.println("initialization failed!");
-        while (1);
-    }
+void writeSD(){
     Serial.println("initialization done.");
     // open the file. note that only one file can be open at a time,
     // so you have to close this one before opening another.
@@ -40,6 +29,32 @@ void setup()
         // if the file didn't open, print an error:
         Serial.println("error opening data.txt");
     }
+}
+
+void setup() 
+{
+    // Open serial communications and wait for port to open:
+    Serial.begin(9600);
+    while (!Serial); // wait for serial port to connect. Needed for native USB port only
+
+    Serial.print("Initializing SD card...");
+    if (!SD.begin(10)) 
+    {
+        Serial.println("initialization 10 failed!");
+        while (1);
+    }
+
+    writeSD();
+
+    if (!SD.begin(9)) 
+    {
+        Serial.println("initialization 9 failed!");
+        while (1);
+    }
+
+    writeSD();
+
+    
 }
 void loop() 
 {
