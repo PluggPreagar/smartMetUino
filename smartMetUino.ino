@@ -1,16 +1,29 @@
 
-#if 0
+#if 1
+#if 1
+
+#define LOGw(s) ;
+#define LOGHEX(s) ;
+#define LOG_(s) ;
+#define LOG__(s) Serial.print(s)
+#define LOG(s)  Serial.println(s)
+
+#else
 
 // may interfere with serial.read ....
 #define LOGw(s) Serial.write(s)
 #define LOGHEX(s) Serial.print(s, HEX)
 #define LOG_(s) Serial.print(s)
+#define LOG__(s) Serial.print(s)
 #define LOG(s)  Serial.println(s)
+
+#endif
 
 #else
 
 #define LOGw(s) ;
 #define LOG_(s) ;
+#define LOG__(s) ;
 #define LOG(s)  ;
 #define LOGHEX(s);
 
@@ -19,9 +32,13 @@
 
 
 #include <SoftwareSerial.h>
+
+#if 0
 #define rxPin_0 5
 #define txPin_0 6
 SoftwareSerial mySerial_0 =  SoftwareSerial(rxPin_0, txPin_0);
+#endif
+
 #define rxPin_1 7
 #define txPin_1 8
 SoftwareSerial mySerial_1 =  SoftwareSerial(rxPin_1, txPin_1);
@@ -61,15 +78,22 @@ byte          ledPin[2] = { ledPin_0, ledPin_1  };
 unsigned long timer[2] = {};
 
 
+#include <SPI.h>
+#include <SD.h>
+File dataFile;
+
+
 void setup() {
   // LOG / Command - Line
   Serial.begin(9600);
   while (!Serial) {;} // wait for serial port to connect. Needed for native USB port only
 
+  digitalWrite( ledPin_Board, HIGH );
+
   // Line 0
-  pinMode(rxPin_0, INPUT);
-  pinMode(txPin_0, OUTPUT);
-  mySerial_0.begin(9600);
+  //pinMode(rxPin_0, INPUT);
+  //pinMode(txPin_0, OUTPUT);
+  //mySerial_0.begin(9600);
 
 
   // Line 1
@@ -82,22 +106,98 @@ void setup() {
   pinMode(ledPin_0  , OUTPUT);
   pinMode(ledPin_1  , OUTPUT);
 
-  Serial.print( mySerial_0.isListening() ? "0" : "_" );Serial.print( mySerial_1.isListening() ? "1" : "_" );Serial.println( " is on");
+  //Serial.print( mySerial_0.isListening() ? "0" : "_" );
+  Serial.print( mySerial_1.isListening() ? "1" : "_" );Serial.println( " is on");
 
+  digitalWrite( ledPin_0, HIGH );
+  digitalWrite( ledPin_1, HIGH );
+
+  LOG("Initializing SD card...");
+  if (!SD.begin(10)) 
+  {
+      Serial.println("initialization 10 failed!");
+      while (1);
+  }  
+  digitalWrite( ledPin_0, LOW );
+
+  if (!SD.begin(9)) 
+  {
+      Serial.println("initialization 9 failed!");
+      while (1);
+  }
+  digitalWrite( ledPin_1, LOW );
 
   // 
   LOG("ready to mirror your entries!");
 
+  digitalWrite( ledPin_Board, LOW );
   //memset(_digit_idx, 0, sizeof(_digit_idx)); // need to force clear 
 }
 
+
+
+bool writeSD(byte sdPin){
+  bool written = false;
+  if (!SD.begin(sdPin)) 
+  {
+      Serial.println(String(String(sdPin  ) + "initialization failed!"));
+      // while (1); // just skipp
+  } else {
+    // open the file. note that only one file can be open at a time,
+    // so you have to close this one before opening another.
+    //
+    // String fileName = String(String( digit[0][0] % 100000000 ) + ".txt");
+    String fileName = String(String(( digit[0][0] % 100000000 ) / 1000 ) + ".txt");
+    if (10 == sdPin && 0 == digit[0][0] % 10) {
+          Serial.print( fileName );
+          Serial.print(" ");Serial.print(digit[0][1]);
+          Serial.print(" ");Serial.print(digit[0][6]);
+          Serial.print(" ");Serial.print(digit[1][1]);
+          Serial.print(" ");Serial.println(digit[1][6]);
+    };
+    dataFile = SD.open( fileName, FILE_WRITE);
+    if (dataFile)  // if the file opened okay, write to it:
+    {
+        LOG_("Writing to ...");
+        for(int srcId = 0 ; srcId < 2; srcId++) {
+          for(int idx = 0 ; idx < DIGIT_MAX_VALUE_COUNT ; idx++) {
+            dataFile.print(digit[srcId][idx]);dataFile.print(";");
+          }
+        }
+        dataFile.println("");
+        dataFile.close();
+        LOG("done.");
+        written = true;
+    } 
+    else 
+    {
+        Serial.print("error opening file: ");Serial.println(fileName);// if the file didn't open, print an error:
+    }
+
+  }
+  return written;
+}
+
+
 void writeSML(){
+  writeSD(9);
+  if (!writeSD(10)) {
+    bool toggle = HIGH;
+    digitalWrite( ledPin_Board, toggle );
+    while(!writeSD(10)) {
+      delay(500);
+      digitalWrite( ledPin[0] , toggle = !toggle); 
+      digitalWrite( ledPin[1] , !toggle); 
+    }
+  }
+  /*
   for(int srcId = 0 ; srcId < 2; srcId++) {
     for(int idx = 0 ; idx < DIGIT_MAX_VALUE_COUNT ; idx++) {
       Serial.print(digit[srcId][idx]);Serial.print(";");
     }
   }
   Serial.println("");
+  */
   memset(_match, 0, sizeof(_match));
   memset(digit, 0, sizeof(digit));
   memset(_digit_idx, 0, sizeof(_digit_idx));
@@ -153,13 +253,13 @@ void readSML(byte inByte, byte srcId, byte pattern[], byte pattern_len){
         digitalWrite( ledPin[srcId] , HIGH);
       } 
       digit[srcId][_digit_idx[srcId]] = digit[srcId][_digit_idx[srcId]] * 256 + inByte;
-      LOG_("+");
+      LOG__("+");
       match++;
     } else {
       // Serial.println(digit[srcId][_digit_idx[srcId]]);
       digitalWrite( ledPin[srcId] , LOW); 
       _digit_idx[srcId]++;
-      LOG_("=");LOG_(" ");
+      LOG__("=");LOG_(" ");
       match = 0;
     }    
   } else if (inByte == pattern[match])  { // char(FF) != byte(255)  !!!
@@ -169,7 +269,7 @@ void readSML(byte inByte, byte srcId, byte pattern[], byte pattern_len){
     if (inByte == pattern[match+1]) {
       match += 2;
     }
-    LOG_("*");
+    LOG__("*");
   } else if (PLACEHOLDER == pattern[match] )  { 
     LOG_(inByte);  LOG_( 0xFF == pattern[match+1] ? ";" : ".");
     match++;
@@ -180,13 +280,14 @@ void readSML(byte inByte, byte srcId, byte pattern[], byte pattern_len){
     LOG_("T");
     match++;
   } else {
-    if (0!=match) {LOG_("<  ");}   
+    if (0!=match) {LOG__("<  ");}   
     match = 0;
   } // match
   _match[srcId] = match;
   if (0!=match) {LOG_(" ");}   
   
 }
+
 
 
 /* Test-Data
@@ -223,8 +324,8 @@ void loop() {
       && ((0 == _digit_idx[1] && _digit_idx[0] > 0) || _digit_idx[1] >= DIGIT_MAX_VALUE_COUNT))  {
     //serials_reset_time  = SERIAL_RESET_DISABLE; // all good - no need to check ...
     // correct times ...
-    digit[0][0] += 1657884311 - 54976989;
-    digit[1][0] += 1657884311 - 54976989;
+  //  digit[0][0] += 1657884311 - 54976989;
+  //  digit[1][0] += 1657884311 - 54976989;
     //
     digitalWrite(ledPin_Board , HIGH);
     Serial.println("");
